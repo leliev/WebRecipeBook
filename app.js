@@ -1,6 +1,6 @@
 const express = require("express");
 const cors = require("cors");
-const db = require("./app/models");
+const db = require("./models");
 
 const app = express();
 //Set the URL allowed
@@ -16,7 +16,7 @@ app.use(express.json());
 //Parse requests of content-type - application/x-ww-form-urlencoded
 app.use(express.urlencoded({ extended: true }));
 
-//For prod ?? (temp)
+//For test (temp)
 /*db.sequelize.sync().then(() => {
   console.log("db connection success")
 }).catch((err) => {
