@@ -5,7 +5,7 @@ module.exports = (sequelize, Sequelize) => {
       allowNull: false,
       defaultValue:''
     }
-  });
+  }, { timestamps: false });
 
   return Ingredient;
 };

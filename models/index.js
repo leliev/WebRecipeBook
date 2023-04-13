@@ -26,32 +26,28 @@ const db = {};
 db.Sequelize = Sequelize;
 db.sequelize = sequelize;
 
+//Instantiate models
 db.recipe = require("./recipe.model.js")(sequelize, Sequelize);
 db.course = require("./course.model.js")(sequelize, Sequelize);
 db.ingredient = require("./ingredient.model.js")(sequelize, Sequelize);
+db.recipeIngredients = require("./recipeIngredients.model.js")(sequelize, Sequelize);
 
-const RecipeIngredients = sequelize.define("recipe_ingredients", {
-  id: {
-    type: Sequelize.INTEGER,
-    primaryKey: true,
-    autoIncrement: true,
-    allowNull: false
-  },
-  quantity: {
-    type: Sequelize.INTEGER,
-    allowNull: false,
-    defaultValue: 0
-  }
-}, { timestamps: false });
-
-
+//Declaring super Many-to-Many association
 db.recipe.belongsToMany(db.ingredient, {
-  through: RecipeIngredients
+  as: 'relIngredients',
+  through: db.recipeIngredients
 });
 db.ingredient.belongsToMany(db.recipe, {
-  through: RecipeIngredients
+  as: 'relRecipes',
+  through: db.recipeIngredients
 });
+db.recipe.hasMany(db.recipeIngredients);
+db.recipeIngredients.belongsTo(db.recipe)
 
+db.ingredient.hasMany(db.recipeIngredients)
+db.recipeIngredients.belongsTo(db.ingredient)
+
+//Recipe/Course One-to-Many association
 db.recipe.belongsTo(db.course);
 db.course.hasMany(db.recipe);
 
