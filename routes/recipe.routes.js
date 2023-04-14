@@ -8,4 +8,6 @@ module.exports = function(app) {
   app.get("/api/recipe/:recipeId", controller.getRecipeById);
 
   app.get("/api/ingredient/:ingredientId", controller.getRecipesByIngredient);
+
+  app.put("/api/recipe/:recipeId", controller.updateRecipe);
 };

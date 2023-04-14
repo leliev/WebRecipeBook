@@ -67,7 +67,7 @@ exports.createRecipe = async (req, res) => {
   } catch(error) {
     console.error(error);
     return res.send({
-      message: error.message || "Some error occurred while retrieving articles."
+      message: error.message || "Some error occurred while creating recipe."
     });
   };
 };
@@ -92,7 +92,7 @@ exports.getAllRecipes = (req, res) => {
   }).catch(error => {
     console.error(error);
     return res.send({
-      message: error.message || "Some error occurred while retrieving articles."
+      message: error.message || "Some error occurred while retrieving recipes."
     });
   });
 };
@@ -123,7 +123,7 @@ exports.getRecipeById = (req, res) => {
   }).catch(error => {
     console.error(error);
     return res.send({
-      message: error.message || "Some error occurred while retrieving articles."
+      message: error.message || "Some error occurred while retrieving recipe."
     });
   });
 };
@@ -145,4 +145,86 @@ exports.getRecipesByIngredient = (req, res) => {
     };
     return res.json(list)
   });
+};
+
+exports.updateRecipe = async (req, res) => {
+
+  if (!newName && !newInstruction && !newPreptime && !newServing && !newCourse && ! newIngredients) {
+    console.log({message: "You need to update at least one value"})
+    return res.send({message: "You need to update at least one value"});
+  };
+
+  try {
+    const newRecipe = {};
+    const recipeId = parseInt(req.params.recipeId);
+    console.log({message: "id"+recipeId})
+    
+    const oldRecipe = await Recipe.findByPk(recipeId, {
+      attributes: {exclude: ["courseId"]},
+      include: [
+        {model: Ingredient, as: 'relIngredients', attributes: ["name"],
+          through: {attributes: ["quantity"]}
+        },
+        {model: Course, attributes: ["name"]}
+      ]
+    });
+  
+    function newFieldHandler(attribute, value) {
+
+      console.log({message:"value:"+ value + "for attribute:" + attribute});
+      if (!value || value.length === 0 || oldRecipe[attribute] === value) {
+        return newRecipe;
+      } else {
+        newRecipe[attribute] = value;
+        return newRecipe;
+      };
+    };
+    const newName = req.body.name;
+    newFieldHandler("name", newName);
+
+    const newInstruction = req.body.instruction;
+    newFieldHandler("instruction", newInstruction);
+
+    const newPreptime = parseInt(req.body.preptime);
+    newFieldHandler("preptime", newPreptime);
+
+    const newServing = parseInt(req.body.serving);
+    newFieldHandler("serving", newServing);
+
+    const rows = await Recipe.update({...newRecipe}, {
+      where: {id: recipeId}
+    });
+
+    const newCourse = req.body.course;
+    const updatedRecipe = await Recipe.findByPk(recipeId, {
+      attributes: {exclude: ["courseId"]},
+      include: [
+        {model: Ingredient, as: 'relIngredients', attributes: ["name"],
+          through: {attributes: ["quantity"]}
+        },
+        {model: Course, attributes: ["name"]}
+      ]
+    });
+
+    if (newCourse && newCourse != oldRecipe.course.name) {
+      const [course, created] = await FoCName(Course, newCourse);
+    
+      updatedRecipe.setCourse(course);
+      console.log({message: "Course " + newCourse + " added to " + updatedRecipe.name});
+    };
+
+    if (rows == 1) {
+      return res.json({updatedRecipe})
+    } else {
+      //Send error if no row modified
+      res.status(500).send({
+        message: `Cannot update recipe with id=${recipeId}`
+      });
+    };
+  } catch(error) {
+    console.error(error);
+    return res.send({
+      message: error.message || "Some error occurred while updating recipe."
+    });
+  };
 };

@@ -18,16 +18,16 @@ app.use(express.urlencoded({ extended: true }));
 
 //DB connection 
 //For test (temp)
-/*db.sequelize.sync().then(() => {
+db.sequelize.sync().then(() => {
   console.log("db connection success")
 }).catch((err) => {
   console.log(err.message)
-});*/
+});
 
-//For dev
+/*//For dev
 db.sequelize.sync({ force: true }).then(() => {
   console.log("Drop and re-sync db.");
-});
+});*/
 
 //API routes
 require('./routes/recipe.routes')(app);
