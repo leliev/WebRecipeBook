@@ -48,8 +48,8 @@ db.ingredient.hasMany(db.recipeIngredients)
 db.recipeIngredients.belongsTo(db.ingredient)
 
 //Recipe/Course One-to-Many association
-db.recipe.belongsTo(db.course);
-db.course.hasMany(db.recipe);
+db.recipe.belongsTo(db.course, { foreignKey: { allowNull: false }});
+db.course.hasMany(db.recipe, { foreignKey: { allowNull: false }});
 
 
 module.exports = db;

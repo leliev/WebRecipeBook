@@ -23,9 +23,10 @@ exports.createRecipe = async (req, res) => {
   const preptime = parseInt(req.body.preptime);
   const serving = parseInt(req.body.serving);
   const ingredients = req.body.ingredients;
-  const course = req.body.course;
-  //If missing data reject request
-  if (!name || !instruction || !preptime || !serving || !course) {
+  const courseId = parseInt(req.body.courseId);
+
+  //If missing data reject request(front check also)
+  if (!name || !instruction || !preptime || !serving || !courseId) {
     console.log({message: "recipe incomplete"})
     return res.send({message: "Recipe incomplete"});
   };
@@ -34,7 +35,8 @@ exports.createRecipe = async (req, res) => {
     name: name,
     instruction: instruction,
     preptime: preptime,
-    serving: serving
+    serving: serving,
+    courseId: courseId
   };
 
   try {
@@ -43,25 +45,27 @@ exports.createRecipe = async (req, res) => {
       where: {name: name},
       defaults: {...recipe}
     });
+    
     //If data exist reject request
     if (!created) {
       console.log("Recipe already exist")
       return res.send({message: "Recipe already exist"});
+
     } else {
       //Create entry if don't exist for each recipe's ingredients
       Object.entries(ingredients).forEach(([key, value]) => {
         FoCName(Ingredient, key).then(data => {
-          //Add relation between current ingredient(dreated or not) and recipe
-          newRecipe.addRelIngredients(data[0], {through: {quantity: value}});
-          console.log({message: "ingredient " + key + " added with quantity " + value});
+          //Add relation between current ingredient(created or not) and recipe
+          newRecipe.addRelIngredients(data[0], {through: {quantity: value}}).then(relCreated => {
+            if (!relCreated) {
+              return res.send({message: `Could not associate ingredient ${data[0].name}`});
+            };
+            console.log({message: "ingredient " + key + " added with quantity " + value});
+          });
         });
       });
-      //Create entry if don't exist
-      FoCName(Course, course).then(data => {
-        //Set relation between given course and recipe
-        newRecipe.setCourse(data[0]);
-        console.log({message: "Course " + course + " added to " + newRecipe.name});
-      });
+
+      console.log({message: "Course " + courseId + " added to " + newRecipe.name});
       return res.send({message: "Recipe created "});
     };
   } catch(error) {
@@ -71,6 +75,7 @@ exports.createRecipe = async (req, res) => {
     });
   };
 };
+
 //Retrieve all recipes in DB
 exports.getAllRecipes = (req, res) => {
   Recipe.findAll({
@@ -96,10 +101,11 @@ exports.getAllRecipes = (req, res) => {
     });
   });
 };
+
 //Retrieve one recipe by ID (request parameter)
 exports.getRecipeById = (req, res) => {
-  console.log({message: "ID:" + parseInt(req.params.recipeId)})
   const recipeId = parseInt(req.params.recipeId);
+  console.log({message: "ID:" + recipeId})
 
   if (!recipeId) {
     //Terminate if no ID found in params
@@ -127,10 +133,12 @@ exports.getRecipeById = (req, res) => {
     });
   });
 };
+
 //Retrieve all recipes containing given ingredient ID (request parameter)
 exports.getRecipesByIngredient = (req, res) => {
-  const id = parseInt(req.params.ingredientId)
-  console.log({message: "ID:" + parseInt(req.params.ingredientId)})
+  console.log(req.params);
+  const id = parseInt(req.params.ingredientId);
+  console.log({message: "ID:" + id});
 
   Recipe.findAll({
     include: [
@@ -147,20 +155,35 @@ exports.getRecipesByIngredient = (req, res) => {
   });
 };
 
-exports.updateRecipe = async (req, res) => {
+//Find recipe by course type
+exports.getRecipesByCourse = (req, res) => {
+  console.log(req.params);
+  const id = parseInt(req.params.courseId);
 
-  if (!newName && !newInstruction && !newPreptime && !newServing && !newCourse && ! newIngredients) {
-    console.log({message: "You need to update at least one value"})
-    return res.send({message: "You need to update at least one value"});
-  };
+  Recipe.findAll({
+    where: {courseId: id},
+    include: [
+      {model: Ingredient, as: "relIngredients", attributes: ["name"],
+        through: {attributes: ["quantity"]}
+      },
+      {model: Course, attributes: ["name"]}
+    ]
+  }).then(list => {
+    if (list.length === 0 || !list) {
+      return res.send({message: "No recipe with given course found"});
+    };
+    return res.json(list)
+  })
+},
+
+//Works but is ugly and need work, update recipe except ingredients (separate route and controller)
+exports.updateRecipe = async (req, res) => {
 
   try {
     const newRecipe = {};
     const recipeId = parseInt(req.params.recipeId);
-    console.log({message: "id"+recipeId})
-    
+    //Fetch instance of tageted recipe for comparison
     const oldRecipe = await Recipe.findByPk(recipeId, {
-      attributes: {exclude: ["courseId"]},
       include: [
         {model: Ingredient, as: 'relIngredients', attributes: ["name"],
           through: {attributes: ["quantity"]}
@@ -168,14 +191,15 @@ exports.updateRecipe = async (req, res) => {
         {model: Course, attributes: ["name"]}
       ]
     });
-  
-    function newFieldHandler(attribute, value) {
 
-      console.log({message:"value:"+ value + "for attribute:" + attribute});
+    //Evaluates attributes if to be updated or not and store value in recipe object
+    function newFieldHandler(attribute, value) {
       if (!value || value.length === 0 || oldRecipe[attribute] === value) {
+        console.log({message:`Didn't update attribute: ${attribute} with value: ${value}`});
         return newRecipe;
       } else {
         newRecipe[attribute] = value;
+        console.log({message:`Attribute: ${attribute} updated to value: ${value}`});
         return newRecipe;
       };
     };
@@ -191,30 +215,31 @@ exports.updateRecipe = async (req, res) => {
     const newServing = parseInt(req.body.serving);
     newFieldHandler("serving", newServing);
 
+    //Course update logic
+    const newCourse = parseInt(req.body.courseId);
+    //Must be a valid preexisting id
+    if (newCourse < 1 || newCourse > 3) {
+      return res.send({message: `invalid course`});
+    };
+    //Set new course if relevant
+    async function courseUpdate() {
+      if (newCourse && (newCourse != oldRecipe.courseId)) {
+        const updateData = await oldRecipe.setCourse(newCourse);
+        if (updateData) {
+          console.log({message: "Course " + newCourse + " added to " + oldRecipe.name});
+          return true
+        };
+      };
+      return false
+    };
+    //Update target recipe with recipe object values
     const rows = await Recipe.update({...newRecipe}, {
       where: {id: recipeId}
     });
-
-    const newCourse = req.body.course;
-    const updatedRecipe = await Recipe.findByPk(recipeId, {
-      attributes: {exclude: ["courseId"]},
-      include: [
-        {model: Ingredient, as: 'relIngredients', attributes: ["name"],
-          through: {attributes: ["quantity"]}
-        },
-        {model: Course, attributes: ["name"]}
-      ]
-    });
-
-    if (newCourse && newCourse != oldRecipe.course.name) {
-      const [course, created] = await FoCName(Course, newCourse);
-    
-      updatedRecipe.setCourse(course);
-      console.log({message: "Course " + newCourse + " added to " + updatedRecipe.name});
-    };
-
-    if (rows == 1) {
-      return res.json({updatedRecipe})
+    //If anything was changed send confirmation
+    const update = await courseUpdate();
+    if (rows == 1 || update) {
+      return res.send({message: `Recipe updated`});
     } else {
       //Send error if no row modified
       res.status(500).send({
@@ -225,6 +250,31 @@ exports.updateRecipe = async (req, res) => {
     console.error(error);
     return res.send({
       message: error.message || "Some error occurred while updating recipe."
+    });
+  };
+};
+
+//Recipe delete controller
+exports.deleteRecipe = async (req, res) => {
+  const recipeId = parseInt(req.params.recipeId);
+
+  try {
+    //Try to destroy recipe with given Id
+    const row = await Recipe.destroy({where: {id: recipeId}});
+    //Ids are unique so if affected row number not 1 => error
+    if (row != 1) {
+      return res.status(500).send({
+        message: `Cannot delete recipe with id=${recipeId}`
+      });
+    };
+    //Confirm if expected value
+    console.log({'recipe deleted': row});
+    return res.send({message: `Recipe deleted`});
+
+  } catch(error) {
+    console.error(error);
+    return res.send({
+      message: error.message || "Some error occurred while deleting recipe."
     });
   };
 };

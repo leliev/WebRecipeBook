@@ -3,7 +3,7 @@ module.exports = (sequelize, Sequelize) => {
     name: {
       type: Sequelize.STRING,
       allowNull: false,
-      defaultValue:''
+      unique: true
     }
   }, { timestamps: false });
 
